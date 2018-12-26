@@ -30,9 +30,6 @@ function parseQueryParams() {
 function start() {
     const trainingParams = parseQueryParams();
     const { minFret, maxFret, stringsArray } = trainingParams;
-    console.log(minFret);
-    console.log(maxFret);
-    console.log(stringsArray);
     let sessionRightCt = 0;
     let sessionWrongCt = 0;
     // padded out the zero so the array index corresponds to string number.
@@ -103,8 +100,6 @@ function start() {
         }
         const rS = randomString();
         const rF = randomFret();
-        console.log(rS);
-        console.log(rF);
         currentNote = notesByString[rS][rF];
         currentNoteId = `s_${rS}_${rF}`;
         noteOn(currentNoteId);
