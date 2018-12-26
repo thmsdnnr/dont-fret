@@ -1,285 +1,533 @@
 <html>
+
 <head>
-<title>Ear Trainer v0.1</title>
+  <title>Ear Trainer v0.1</title>
 </head>
-<script src="./Tone.min.js"></script>
-
+<script src="/vendor/Tone.min.js"></script>
+<script src="/vendor/vexflow-min.js"></script>
 <script type="text/javascript">
-// padded out the zero so the array index corresponds to string number.
-const tuning = ["E4", "E4", "B3", "G3", "D3", "A2", "E2"]; // high string to low string, 1 -> 6
-
-const generateNoteRange = (baseNote, noteCt) => {
-  const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  const split = baseNote.split("");
-  const octave = Number(split[split.length - 1]);
-  if (isNaN(octave)) {
-     throw new Error("Octave is not a number!");
-  }
-  const note = split.slice(0, split.length - 1).join("");
-  let currentIdx = notes.indexOf(note);
-  if (currentIdx === -1) {
-    throw new Error("Not a valid note (or you used a flat sign)");
-  }
-  let result = [];
-  let ct = 0;
-  let currentOctave = octave;
-  while (ct < noteCt) {
-    if (currentIdx == notes.length) {
-      currentIdx = 0;
-      currentOctave++;
+  // padded out the zero so the array index corresponds to string number.
+  function start() {
+    let sessionRightCt = 0;
+    let sessionWrongCt = 0;
+    const tuning = ["E4", "E4", "B3", "G3", "D3", "A2", "E2"]; // high string to low string, 1 -> 6
+    const INTER_NOTE_DELAY_MS = 1000;
+    const generateNoteRange = (baseNote, noteCt) => {
+      const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+      const split = baseNote.split("");
+      const octave = Number(split[split.length - 1]);
+      if (isNaN(octave)) {
+        throw new Error("Octave is not a number!");
+      }
+      const note = split.slice(0, split.length - 1).join("");
+      let currentIdx = notes.indexOf(note);
+      if (currentIdx === -1) {
+        throw new Error("Not a valid note (or you used a flat sign)");
+      }
+      let result = [];
+      let ct = 0;
+      let currentOctave = octave;
+      while (ct < noteCt) {
+        if (currentIdx == notes.length) {
+          currentIdx = 0;
+          currentOctave++;
+        }
+        result.push(notes[currentIdx] + String(currentOctave));
+        currentIdx++;
+        ct++;
+      }
+      return result;
     }
-    result.push(notes[currentIdx] + String(currentOctave));
-    currentIdx++;
-    ct++;
+
+    const notesByString = tuning.map(baseNote => generateNoteRange(baseNote, 13));
+    // notesByString[stringNumber][fretNumber] yields note. eg notesByString[6][0] is low E, E2
+
+    var synth = new Tone.Synth().toMaster();
+    const randomInRange = (min, max) => Math.floor(Math.random() * (max - min)) + min;
+    const randomString = () => randomInRange(1, 5);
+    const randomFret = () => randomInRange(0, 13);
+
+    const rightIcon = document.getElementById("right");
+    const wrongIcon = document.getElementById("wrong");
+    const showSelector = selector => selector.style.display = "block";
+    const hideSelector = selector => selector.style.display = "none";
+    // s_<stringNumber>_<fretNumber>
+    let currentNoteId = "";
+    let currentNote = "";
+
+    const playNote = note => synth.triggerAttackRelease(note, '4n');
+    const noteIdToSelector = {}; // memoize note selectors
+    const getNoteSelector = noteId => {
+      let selector;
+      if (noteIdToSelector[noteId]) {
+        selector = noteIdToSelector[noteId];
+      } else {
+        selector = document.getElementById(noteId);
+        noteIdToSelector[noteId] = selector;
+      }
+      return selector;
+    }
+
+    const noteOn = noteId => getNoteSelector(noteId).classList.add("active");
+    const noteOff = noteId => getNoteSelector(noteId).classList.remove("active");
+
+    function generateAndPlay() {
+      if (currentNoteId !== "") {
+        noteOff(currentNoteId);
+      }
+      // TODO: train by string / by fret / etc.
+      const rS = randomString();
+      const rF = randomFret();
+      currentNote = notesByString[rS][rF];
+      currentNoteId = `s_${rS}_${rF}`;
+      console.log(currentNote);
+      console.log(currentNoteId);
+      noteOn(currentNoteId);
+      playNote(currentNote);
+      writeNotationNote(currentNote);
+    }
+
+    function checkGuess(e) {
+      const guess = e.target.id;
+      const guessCompare = currentNote.split("").slice(0, currentNote.length - 1).join("");
+      if (guess === guessCompare) {
+        sessionRightCt++;
+        hideSelector(wrongIcon);
+        showSelector(rightIcon);
+        setTimeout(function () {
+          hideSelector(rightIcon);
+          generateAndPlay();
+        }, INTER_NOTE_DELAY_MS);
+      } else {
+        sessionWrongCt++;
+        hideSelector(rightIcon);
+        showSelector(wrongIcon);
+      }
+    }
+
+    const eraseOldNotation = () => {
+      const staff = document.getElementById('vexNote');
+      while (staff.hasChildNodes()) {
+        staff.removeChild(staff.lastChild);
+      }
+    }
+
+    const writeNotationNote = noteName => {
+      eraseOldNotation();
+      const VF = Vex.Flow;
+      var vf = new VF.Factory({
+        renderer: { elementId: 'vexNote', width: 100, height: 200 }
+      });
+      var score = vf.EasyScore();
+      var system = vf.System();
+      system.addStave({
+        voices: [
+          score.voice(score.notes(`${noteName}/w`))]
+      }).addClef('treble');
+      vf.draw();
+    }
+
+    const neck = document.getElementById("guitar_neck");
+    const guesses = document.getElementById("notes_to_guess");
+    const replay = document.getElementById("replay");
+    replay.addEventListener("click", function () {
+      if (currentNote !== "") {
+        playNote(currentNote);
+      }
+    });
+    guesses.addEventListener("click", function (e) {
+      checkGuess(e);
+    });
+    neck.addEventListener("click", function () {
+      generateAndPlay();
+    });
   }
-  return result;
-}
-
-const notesByString = tuning.map(baseNote => generateNoteRange(baseNote, 13));
-// notesByString[stringNumber][fretNumber] yields note. eg notesByString[6][0] is low E, E2
-
-var synth = new Tone.Synth().toMaster();
-const randomInRange = (min, max) => Math.floor(Math.random() * (max - min)) + min;
-const randomString = () => randomInRange(1, 5);
-const randomFret = () => randomInRange(0, 13);
-
-// s_<stringNumber>_<fretNumber>
-let currentNoteId = "";
-let currentNote = "";
-
-const playNote = note => synth.triggerAttackRelease(note, '4n');
-const noteIdToSelector = {}; // memoize note selectors
-const getNoteSelector = noteId => {
-  let selector;
-  if (noteIdToSelector[noteId]) {
-    selector = noteIdToSelector[noteId];
-  } else {
-    selector = document.getElementById(noteId);
-    noteIdToSelector[noteId] = selector;
-  }
-  return selector;
-}
-
-const noteOn = noteId => getNoteSelector(noteId).classList.add("active");
-const noteOff = noteId => getNoteSelector(noteId).classList.remove("active");
-
-function generateAndPlay() {
-  if (currentNoteId !== "") {
-    noteOff(currentNoteId);
-  }
-  // TODO: train by string / by fret / etc.
-  const rS = randomString();
-  const rF = randomFret();
-  currentNote = notesByString[rS][rF];
-  currentNoteId = `s_${rS}_${rF}`;
-  console.log(currentNote);
-  console.log(currentNoteId);
-  noteOn(currentNoteId);
-  playNote(currentNote);
-}
-
-function checkGuess(e) {
-  const guess = e.target.id;
-  const guessCompare = currentNote.split("").slice(0, currentNote.length - 1).join("");
-  console.log(guessCompare)
-  if (guess === guessCompare) {
-    console.log("Correct!");
-    generateAndPlay();
-  } else {
-    console.log("Try again");
-  }
-  console.log(e.target.id);
-}
-
-function start() {
- const neck = document.getElementById("guitar_neck");
- const guesses = document.getElementById("notes_to_guess");
-  guesses.addEventListener("click", function(e) {
-    checkGuess(e);
-  });
-  neck.addEventListener("click", function() {
-    generateAndPlay();
-  });
-}
-document.addEventListener("DOMContentLoaded", start);
+  document.addEventListener("DOMContentLoaded", start);
 
 </script>
+
 <body>
-<style>
-div#guitar_neck {
-  width: 100%;
-  background-color: papayawhip;
-  height: 350px;
-  display: flex;
-  flex-flow: column;
-  justify-content: center;
-}
-div.string {
-  flex: none;
-  display: flex;
-  width: 100%;
-  height: 16%;
-  flex-flow: row nowrap;
-}
-div.note:before {
-  content: '';
-  position: absolute;
-  left: 0;
-  border-top: 1px solid black;
-  background: black;
-  width: 100%;
-  margin-top: 24px;
-}
-div.note {
-  height: 100%;
-  width: 10%;
-  flex: auto;
-  border-right: 2px solid saddlebrown;
-}
-div.note.active {
-  border-radius: 50%;
-  background-color: green;
-  border-right: none;
-  padding-right: 2px;
-}
-div.note:first-child {
-  width: 5px;
-}
-div.note:last-child {
-  width: 5px;
-}
-div.note-guess {
-  cursor: pointer;
-  width: 50px;
-  height: 50px;
-  font-family: Courier;
-  font-size: 1em;
-  flex: none;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border: 1px solid black;
-  margin: 8px;
-  border-radius: 4px;
-}
-div.note-guess:hover {
-  background-color: #000000;
-  color: #ffffff;
-}
-div#notes_to_guess {
-  width: 80%;
-  margin: auto;
-  display: flex;
-  flex-flow: row nowrap;
-  justify-content: center;
-}
-</style>
-<div id="guitar_neck">
-  <div class="string" id="s_1">
-    <div class="note" id="s_1_0"></div>
-    <div class="note" id="s_1_1"></div>
-    <div class="note" id="s_1_2"></div>
-    <div class="note" id="s_1_3"></div>
-    <div class="note" id="s_1_4"></div>
-    <div class="note" id="s_1_5"></div>
-    <div class="note" id="s_1_6"></div>
-    <div class="note" id="s_1_7"></div>
-    <div class="note" id="s_1_8"></div>
-    <div class="note" id="s_1_9"></div>
-    <div class="note" id="s_1_10"></div>
-    <div class="note" id="s_1_11"></div>
-    <div class="note" id="s_1_12"></div>
+  <style>
+    /* http://meyerweb.com/eric/tools/css/reset/ 
+   v2.0 | 20110126
+   License: none (public domain)
+*/
+
+    html,
+    body,
+    div,
+    span,
+    applet,
+    object,
+    iframe,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    p,
+    blockquote,
+    pre,
+    a,
+    abbr,
+    acronym,
+    address,
+    big,
+    cite,
+    code,
+    del,
+    dfn,
+    em,
+    img,
+    ins,
+    kbd,
+    q,
+    s,
+    samp,
+    small,
+    strike,
+    strong,
+    sub,
+    sup,
+    tt,
+    var,
+    b,
+    u,
+    i,
+    center,
+    dl,
+    dt,
+    dd,
+    ol,
+    ul,
+    li,
+    fieldset,
+    form,
+    label,
+    legend,
+    table,
+    caption,
+    tbody,
+    tfoot,
+    thead,
+    tr,
+    th,
+    td,
+    article,
+    aside,
+    canvas,
+    details,
+    embed,
+    figure,
+    figcaption,
+    footer,
+    header,
+    hgroup,
+    menu,
+    nav,
+    output,
+    ruby,
+    section,
+    summary,
+    time,
+    mark,
+    audio,
+    video {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      font-size: 100%;
+      font: inherit;
+      vertical-align: baseline;
+    }
+
+    /* HTML5 display-role reset for older browsers */
+    article,
+    aside,
+    details,
+    figcaption,
+    figure,
+    footer,
+    header,
+    hgroup,
+    menu,
+    nav,
+    section {
+      display: block;
+    }
+
+    body {
+      line-height: 1;
+      margin: 16px;
+    }
+
+    ol,
+    ul {
+      list-style: none;
+    }
+
+    blockquote,
+    q {
+      quotes: none;
+    }
+
+    blockquote:before,
+    blockquote:after,
+    q:before,
+    q:after {
+      content: '';
+      content: none;
+    }
+
+    table {
+      border-collapse: collapse;
+      border-spacing: 0;
+    }
+
+    html {
+      box-sizing: border-box;
+    }
+
+    *,
+    *:before,
+    *:after {
+      box-sizing: inherit;
+    }
+
+    body {
+      font-size: 2em;
+      font-family: Courier, sans-serif;
+    }
+
+    div#guitar_neck {
+      width: 100%;
+      background-color: papayawhip;
+      height: 350px;
+      display: flex;
+      flex-flow: column;
+      justify-content: center;
+      border-top: 5px inset gold;
+      border-bottom: 5px solid gold;
+    }
+
+    div.string {
+      flex: none;
+      display: flex;
+      width: 100%;
+      height: 16%;
+      flex-flow: row nowrap;
+    }
+
+    div.note:before {
+      content: '';
+      position: absolute;
+      left: 0;
+      border-top: 1px solid black;
+      background: black;
+      width: 100%;
+      margin-top: 24px;
+    }
+
+    div.note.single-marker:after {
+      content: "*";
+      display: flex;
+      justify-content: center;
+      line-height: 4px;
+      color: #112233;
+      font-size: 2em;
+    }
+
+    div.note {
+      height: 100%;
+      width: 10%;
+      min-width: 42px;
+      flex: auto;
+      border-right: 2px solid saddlebrown;
+    }
+
+    div.note.active {
+      border-radius: 25%;
+      background-color: green;
+      border-right: none;
+      padding-right: 2px;
+    }
+
+    div.note.first {
+      width: 24px;
+      background-color: aliceblue;
+    }
+
+    div.note.first.active {
+      background-color: green;
+    }
+
+    div.note-guess {
+      cursor: pointer;
+      width: 100px;
+      height: 72px;
+      font-size: 1em;
+      flex: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border: 1px solid black;
+      margin: 8px;
+      border-radius: 4px;
+    }
+
+    div.note-guess:hover {
+      background-color: #000000;
+      color: #ffffff;
+    }
+
+    div#notes_to_guess {
+      width: 80%;
+      margin: auto;
+      display: flex;
+      flex-flow: row wrap;
+      justify-content: center;
+    }
+
+    div#bottom_info {
+      display: flex;
+      flex-flow: row nowrap;
+      width: 75%;
+      margin: auto;
+    }
+
+    div#rightWrong {
+      height: 50px;
+      width: 50px;
+    }
+
+    button#replay {
+      font-size: 1em;
+      font-family: Courier;
+    }
+  </style>
+  <div id="instructions">Click the neck for a new note.</div>
+  <div id="guitar_neck">
+    <div class="string" id="s_1">
+      <div class="note first" id="s_1_0"></div>
+      <div class="note" id="s_1_1"></div>
+      <div class="note" id="s_1_2"></div>
+      <div class="note" id="s_1_3"></div>
+      <div class="note" id="s_1_4"></div>
+      <div class="note" id="s_1_5"></div>
+      <div class="note" id="s_1_6"></div>
+      <div class="note" id="s_1_7"></div>
+      <div class="note" id="s_1_8"></div>
+      <div class="note" id="s_1_9"></div>
+      <div class="note" id="s_1_10"></div>
+      <div class="note" id="s_1_11"></div>
+      <div class="note" id="s_1_12"></div>
+    </div>
+    <div class="string" id="s_2">
+      <div class="note first" id="s_2_0"></div>
+      <div class="note" id="s_2_1"></div>
+      <div class="note" id="s_2_2"></div>
+      <div class="note" id="s_2_3"></div>
+      <div class="note" id="s_2_4"></div>
+      <div class="note" id="s_2_5"></div>
+      <div class="note" id="s_2_6"></div>
+      <div class="note" id="s_2_7"></div>
+      <div class="note" id="s_2_8"></div>
+      <div class="note" id="s_2_9"></div>
+      <div class="note" id="s_2_10"></div>
+      <div class="note" id="s_2_11"></div>
+      <div class="note single-marker" id="s_2_12"></div>
+    </div>
+    <div class="string" id="s_3">
+      <div class="note first" id="s_3_0"></div>
+      <div class="note" id="s_3_1"></div>
+      <div class="note" id="s_3_2"></div>
+      <div class="note" id="s_3_3"></div>
+      <div class="note" id="s_3_4"></div>
+      <div class="note" id="s_3_5"></div>
+      <div class="note" id="s_3_6"></div>
+      <div class="note" id="s_3_7"></div>
+      <div class="note" id="s_3_8"></div>
+      <div class="note" id="s_3_9"></div>
+      <div class="note" id="s_3_10"></div>
+      <div class="note" id="s_3_11"></div>
+      <div class="note" id="s_3_12"></div>
+    </div>
+    <div class="string" id="s_4">
+      <div class="note first" id="s_4_0"></div>
+      <div class="note" id="s_4_1"></div>
+      <div class="note" id="s_4_2"></div>
+      <div class="note single-marker" id="s_4_3"></div>
+      <div class="note" id="s_4_4"></div>
+      <div class="note single-marker" id="s_4_5"></div>
+      <div class="note" id="s_4_6"></div>
+      <div class="note single-marker" id="s_4_7"></div>
+      <div class="note" id="s_4_8"></div>
+      <div class="note single-marker" id="s_4_9"></div>
+      <div class="note" id="s_4_10"></div>
+      <div class="note" id="s_4_11"></div>
+      <div class="note" id="s_4_12"></div>
+    </div>
+    <div class="string" id="s_5">
+      <div class="note first" id="s_5_0"></div>
+      <div class="note" id="s_5_1"></div>
+      <div class="note" id="s_5_2"></div>
+      <div class="note" id="s_5_3"></div>
+      <div class="note" id="s_5_4"></div>
+      <div class="note" id="s_5_5"></div>
+      <div class="note" id="s_5_6"></div>
+      <div class="note" id="s_5_7"></div>
+      <div class="note" id="s_5_8"></div>
+      <div class="note" id="s_5_9"></div>
+      <div class="note" id="s_5_10"></div>
+      <div class="note" id="s_5_11"></div>
+      <div class="note" id="s_5_12"></div>
+    </div>
+    <div class="string" id="s_6">
+      <div class="note first" id="s_6_0"></div>
+      <div class="note" id="s_6_1"></div>
+      <div class="note" id="s_6_2"></div>
+      <div class="note" id="s_6_3"></div>
+      <div class="note" id="s_6_4"></div>
+      <div class="note" id="s_6_5"></div>
+      <div class="note" id="s_6_6"></div>
+      <div class="note" id="s_6_7"></div>
+      <div class="note" id="s_6_8"></div>
+      <div class="note" id="s_6_9"></div>
+      <div class="note" id="s_6_10"></div>
+      <div class="note" id="s_6_11"></div>
+      <div class="note single-marker" id="s_6_12"></div>
+    </div>
   </div>
-  <div class="string" id="s_2">
-    <div class="note" id="s_2_0"></div>
-    <div class="note" id="s_2_1"></div>
-    <div class="note" id="s_2_2"></div>
-    <div class="note" id="s_2_3"></div>
-    <div class="note" id="s_2_4"></div>
-    <div class="note" id="s_2_5"></div>
-    <div class="note" id="s_2_6"></div>
-    <div class="note" id="s_2_7"></div>
-    <div class="note" id="s_2_8"></div>
-    <div class="note" id="s_2_9"></div>
-    <div class="note" id="s_2_10"></div>
-    <div class="note" id="s_2_11"></div>
-    <div class="note" id="s_2_12"></div>
+  <div id="bottom_info">
+    <div id="vexNote"></div>
+    <div id="rightWrong">
+      <svg xmlns="http://www.w3.org/2000/svg" id="right" style="display:none;" width="50" height="50" viewBox="0 0 24 24">
+        <path d="M0 0h24v24H0z" fill="none" />
+        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="green" /></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" id="wrong" style="display:none;" width="50" height="50" viewBox="0 0 24 24">
+        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+          fill="tomato" />
+        <path d="M0 0h24v24H0z" fill="none" /></svg>
+    </div>
+    <div id="notes_to_guess">
+      <div class="note-guess" id="A">A</div>
+      <div class="note-guess" id="A#">A#</div>
+      <div class="note-guess" id="B">B</div>
+      <div class="note-guess" id="C">C</div>
+      <div class="note-guess" id="C#">C#</div>
+      <div class="note-guess" id="D">D</div>
+      <div class="note-guess" id="D#">D#</div>
+      <div class="note-guess" id="E">E</div>
+      <div class="note-guess" id="F">F</div>
+      <div class="note-guess" id="F#">F#</div>
+      <div class="note-guess" id="G">G</div>
+      <div class="note-guess" id="G#">G#</div>
+    </div>
   </div>
-  <div class="string" id="s_3">
-    <div class="note" id="s_3_0"></div>
-    <div class="note" id="s_3_1"></div>
-    <div class="note" id="s_3_2"></div>
-    <div class="note" id="s_3_3"></div>
-    <div class="note" id="s_3_4"></div>
-    <div class="note" id="s_3_5"></div>
-    <div class="note" id="s_3_6"></div>
-    <div class="note" id="s_3_7"></div>
-    <div class="note" id="s_3_8"></div>
-    <div class="note" id="s_3_9"></div>
-    <div class="note" id="s_3_10"></div>
-    <div class="note" id="s_3_11"></div>
-    <div class="note" id="s_3_12"></div>
+  <div id="configuration">
+    <button id="replay">Replay Note</button>
   </div>
-  <div class="string" id="s_4">
-    <div class="note" id="s_4_0"></div>
-    <div class="note" id="s_4_1"></div>
-    <div class="note" id="s_4_2"></div>
-    <div class="note" id="s_4_3"></div>
-    <div class="note" id="s_4_4"></div>
-    <div class="note" id="s_4_5"></div>
-    <div class="note" id="s_4_6"></div>
-    <div class="note" id="s_4_7"></div>
-    <div class="note" id="s_4_8"></div>
-    <div class="note" id="s_4_9"></div>
-    <div class="note" id="s_4_10"></div>
-    <div class="note" id="s_4_11"></div>
-    <div class="note" id="s_4_12"></div>
-  </div>
-  <div class="string" id="s_5">
-    <div class="note" id="s_5_0"></div>
-    <div class="note" id="s_5_1"></div>
-    <div class="note" id="s_5_2"></div>
-    <div class="note" id="s_5_3"></div>
-    <div class="note" id="s_5_4"></div>
-    <div class="note" id="s_5_5"></div>
-    <div class="note" id="s_5_6"></div>
-    <div class="note" id="s_5_7"></div>
-    <div class="note" id="s_5_8"></div>
-    <div class="note" id="s_5_9"></div>
-    <div class="note" id="s_5_10"></div>
-    <div class="note" id="s_5_11"></div>
-    <div class="note" id="s_5_12"></div>
-  </div>
-  <div class="string" id="s_6">
-    <div class="note" id="s_6_0"></div>
-    <div class="note" id="s_6_1"></div>
-    <div class="note" id="s_6_2"></div>
-    <div class="note" id="s_6_3"></div>
-    <div class="note" id="s_6_4"></div>
-    <div class="note" id="s_6_5"></div>
-    <div class="note" id="s_6_6"></div>
-    <div class="note" id="s_6_7"></div>
-    <div class="note" id="s_6_8"></div>
-    <div class="note" id="s_6_9"></div>
-    <div class="note" id="s_6_10"></div>
-    <div class="note" id="s_6_11"></div>
-    <div class="note" id="s_6_12"></div>
-  </div>
-</div>
-<div id="notes_to_guess">
-  <div class="note-guess" id="A">A</div>
-  <div class="note-guess" id="A#">A#</div>
-  <div class="note-guess" id="B">B</div>
-  <div class="note-guess" id="C">C</div>
-  <div class="note-guess" id="C#">C#</div>
-  <div class="note-guess" id="D">D</div>
-  <div class="note-guess" id="D#">D#</div>
-  <div class="note-guess" id="E">E</div>
-  <div class="note-guess" id="F">F</div>
-  <div class="note-guess" id="F#">F#</div>
-  <div class="note-guess" id="G">G</div>
-  <div class="note-guess" id="G#">G#</div>
-</div>
-</div>
 </body>
+
 </html>
