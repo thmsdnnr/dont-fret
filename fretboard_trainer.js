@@ -1,8 +1,41 @@
-// padded out the zero so the array index corresponds to string number.
 // TODO: start is already a wrapper for all logic, turn EarTrainer into an object
+function parseQueryParams() {
+    // can be called with minFret, maxFret, and strings, a comma-delimited list of strings 1-6 to train on
+    let chosenMinFret = 0;
+    let chosenMaxFret = 12;
+    let chosenStringsToTrain = [1, 2, 3, 4, 5, 6];
+    const urlParams = new URLSearchParams(window.location.search)
+    const strings = urlParams.get("strings");
+    const minFret = urlParams.get("min");
+    const maxFret = urlParams.get("max");
+    // TODO: for now these limits are hardcoded -- frets between 0, 12 and strings between 1, 6
+    // can expand later on for non-guitar instruments or instruments with different frets / training withi na fret window.
+    if (minFret && maxFret && maxFret > minFret && minFret >= 0 && maxFret < 13) {
+        chosenMinFret = Number(minFret);
+        chosenMaxFret = Number(maxFret);
+    }
+    if (strings) {
+        let stringSubset = strings.split(",").map(e => Number(e)).filter(e => (e > 0 && e < 7));
+        if (stringSubset.length > 0) {
+            chosenStringsToTrain = stringSubset;
+        }
+    }
+    return {
+        "minFret": chosenMinFret,
+        "maxFret": chosenMaxFret,
+        "stringsArray": chosenStringsToTrain,
+    };
+}
+
 function start() {
+    const trainingParams = parseQueryParams();
+    const { minFret, maxFret, stringsArray } = trainingParams;
+    console.log(minFret);
+    console.log(maxFret);
+    console.log(stringsArray);
     let sessionRightCt = 0;
     let sessionWrongCt = 0;
+    // padded out the zero so the array index corresponds to string number.
     const tuning = ["E4", "E4", "B3", "G3", "D3", "A2", "E2"]; // high string to low string, 1 -> 6
     const INTER_NOTE_DELAY_MS = 1000;
     const generateNoteRange = (baseNote, noteCt) => {
@@ -37,8 +70,8 @@ function start() {
 
     var synth = new Tone.Synth().toMaster();
     const randomInRange = (min, max) => Math.floor(Math.random() * (max - min)) + min;
-    const randomString = () => randomInRange(1, 5);
-    const randomFret = () => randomInRange(0, 13);
+    const randomString = () => stringsArray[randomInRange(0, stringsArray.length)];
+    const randomFret = () => randomInRange(minFret, maxFret + 1);
 
     const rightIcon = document.getElementById("right");
     const wrongIcon = document.getElementById("wrong");
@@ -68,13 +101,12 @@ function start() {
         if (currentNoteId !== "") {
             noteOff(currentNoteId);
         }
-        // TODO: train by string / by fret / etc.
         const rS = randomString();
         const rF = randomFret();
+        console.log(rS);
+        console.log(rF);
         currentNote = notesByString[rS][rF];
         currentNoteId = `s_${rS}_${rF}`;
-        console.log(currentNote);
-        console.log(currentNoteId);
         noteOn(currentNoteId);
         playNote(currentNote);
         writeNotationNote(currentNote);

@@ -7,8 +7,17 @@
 <script src="/vendor/vexflow-min.js"></script>
 <script src="/fretboard_trainer.js"></script>
 <link rel="stylesheet" href="/style.css">
+
 <body>
-  <div id="instructions">Click the neck for a new note.</div>
+  <div id="instructions">
+    Click the neck for a new note. Can visit page with optional query parameters:
+    <ul>
+      <li>min=[minimum fret to train, inclusive]</li>
+      <li>max=[maximum fret to train, inclusive]</li>
+      <li>strings=[comma-delimited, array, of, strings, 1, through, 6]</li>
+    </ul><br />
+    e.g., /index.html?min=0&max=5&string=1,2,3 trains frets open-thru 5 inclusive only on strings G, B, E
+  </div>
   <div id="guitar_neck">
     <div class="string" id="s_1">
       <div class="note first" id="s_1_0"></div>

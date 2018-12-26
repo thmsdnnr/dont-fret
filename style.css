@@ -112,11 +112,6 @@ body {
   margin: 16px;
 }
 
-ol,
-ul {
-  list-style: none;
-}
-
 blockquote,
 q {
   quotes: none;
@@ -148,6 +143,15 @@ html {
 body {
   font-size: 2em;
   font-family: Courier, sans-serif;
+}
+
+div#instructions {
+    font-size: 0.6em;
+    padding: 10px;
+}
+div#instructions ul {
+    padding-top: 16px;
+    padding-left: 32px;
 }
 
 div#guitar_neck {
